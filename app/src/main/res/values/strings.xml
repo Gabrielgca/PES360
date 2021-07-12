@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">PES360</string>
+    <string name="url_360_video"><![CDATA[https://storage.googleapis.com/exoplayer-test-media-1/360/congo.mp4]]></string>
+    <string name="error_unrecognized_stereo_mode">Unrecognized stereo mode</string>
 </resources>
