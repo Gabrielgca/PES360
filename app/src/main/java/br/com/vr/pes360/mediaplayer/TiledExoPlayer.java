@@ -161,7 +161,7 @@ public class TiledExoPlayer implements ExoPlayer {
      * @param loadControl The {@link LoadControl} that controls when the MediaSource buffers
      *                    more media, and how much media is buffered.
      */
-    //CRIAÇÃO DE NOVO CONSTRUTOR 
+    //CRIAÇÃO DE NOVO CONSTRUTOR
     public TiledExoPlayer(Context context, int videoRendererCount,
                           RenderersFactory renderersFactory, MediaSourceFactory mediaSourceFactory,
                           TrackSelector trackSelector, LoadControl loadControl,
