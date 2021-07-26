@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.ListView;
 import android.widget.Toast;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.SimpleExoPlayer;
@@ -27,7 +28,6 @@ public class PlayerActivity extends AppCompatActivity {
 
     private boolean playWhenReady = true;
     private static final String DOWNLOAD_CONTENT_DIRECTORY = "downloads";
-
     private Cache downloadCache;
     private SimpleExoPlayer player;
     private PlayerView playerView;
