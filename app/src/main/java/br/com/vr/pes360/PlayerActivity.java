@@ -3,19 +3,30 @@ package br.com.vr.pes360;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Build;
 import android.os.Bundle;
+import android.service.quicksettings.Tile;
 import android.util.Log;
 import android.widget.ListView;
 import android.widget.Toast;
+
+import com.google.android.exoplayer2.DefaultLoadControl;
+import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.analytics.AnalyticsCollector;
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.exoplayer2.upstream.DataSource;
+import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.cache.Cache;
+import com.google.android.exoplayer2.util.Clock;
 import com.google.android.exoplayer2.video.spherical.SphericalGLSurfaceView;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Util;
 import java.io.File;
+
+import br.com.vr.pes360.mediaplayer.TiledExoPlayer;
 
 
 public class PlayerActivity extends AppCompatActivity {
@@ -29,7 +40,7 @@ public class PlayerActivity extends AppCompatActivity {
     private boolean playWhenReady = true;
     private static final String DOWNLOAD_CONTENT_DIRECTORY = "downloads";
     private Cache downloadCache;
-    private SimpleExoPlayer player;
+    private ExoPlayer player;
     private PlayerView playerView;
     private DataSource.Factory dataSourceFactory;
 
@@ -132,10 +143,16 @@ public class PlayerActivity extends AppCompatActivity {
 
     private void initializePlayer() {
         if (player == null) {
-
-
-
-            player = new SimpleExoPlayer.Builder(this).build();
+            Log.e("INITIALIZE_PLAYER", "Iniciando Player!!");
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this);
+            DefaultTrackSelector trackSelector = new DefaultTrackSelector(this);
+            DefaultLoadControl loadControl = new DefaultLoadControl();
+            DefaultBandwidthMeter bandwidthMeter = new DefaultBandwidthMeter.Builder(this).build();
+            AnalyticsCollector analyticsCollector = new AnalyticsCollector(Clock.DEFAULT);
+            player = new TiledExoPlayer(this,1,mediaSourceFactory,
+                                        trackSelector,loadControl,bandwidthMeter,analyticsCollector).getPlayer();
+            Log.e("INITIALIZE_PLAYER", "PEGOU Player!!");
+  //          player = new SimpleExoPlayer.Builder(this).build();
             SphericalGLSurfaceView sphericalGLSurfaceView = new SphericalGLSurfaceView(this);
 
             MediaItem mediaItem = new MediaItem.Builder()

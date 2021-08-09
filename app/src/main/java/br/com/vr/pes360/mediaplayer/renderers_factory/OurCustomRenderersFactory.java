@@ -525,6 +525,7 @@ public class OurCustomRenderersFactory implements RenderersFactory {
      * @param extensionRendererMode The extension renderer mode.
      * @param out An array to which the built renderers should be appended.
      */
+
     protected void buildTextRenderers(
             Context context,
             TextOutput output,

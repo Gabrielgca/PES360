@@ -1,4 +1,16 @@
+br/com/vr/pes360/mediaplayer/renderers_factory/OurCustomRenderersFactory.java
+ br.com.vr.pes360.mediaplayer.renderers_factory.OurCustomRenderersFactory
+ br.com.vr.pes360.mediaplayer.renderers_factory.OurCustomRenderersFactory$ExtensionRendererMode
 br/com/vr/pes360/PlayerActivity.java
  br.com.vr.pes360.PlayerActivity
 br/com/vr/pes360/BuildConfig.java
  br.com.vr.pes360.BuildConfig
+br/com/vr/pes360/mediaplayer/TiledExoPlayer.java
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer$1
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer$ComponentListener
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer$ExtensionRendererMode
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer$PlaybackParamsHolder
+ br.com.vr.pes360.mediaplayer.TiledExoPlayer$VideoListener
+br/com/vr/pes360/dashSRD/manifest/SupplementalProperty.java
+ br.com.vr.pes360.dashSRD.manifest.SupplementalProperty

@@ -160,7 +160,12 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
     private int videoScalingMode;
     private SurfaceHolder surfaceHolder;
     private TextureView textureView;
-    private TextOutput textOutput;
+    private TextOutput textOutput = new TextOutput() {
+        @Override
+        public void onCues(List<Cue> cues) {
+
+        }
+    };
     private MetadataOutput metadataOutput;
     private VideoListener videoListener;
     private AudioRendererEventListener audioDebugListener;
@@ -185,9 +190,10 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
      */
     //CRIAÇÃO DE NOVO CONSTRUTOR
     public TiledExoPlayer(Context context, int videoRendererCount,
-                           MediaSourceFactory mediaSourceFactory,
+                          MediaSourceFactory mediaSourceFactory,
                           TrackSelector trackSelector, LoadControl loadControl,
                           BandwidthMeter bandwidthMeter, AnalyticsCollector analyticsCollector) {
+        Log.e("CONSTRUTOR_TILED_EXOPLAYER","Construindo TiledExoPlayer");
         mainHandler = new Handler(Looper.myLooper());
         componentListener = new ComponentListener();
         ourCustomRenderersFactory = new OurCustomRenderersFactory(context, videoRendererCount);
@@ -196,16 +202,15 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
         // We expect to have a different surface for each of the video tracks
         this.surfaces = new Surface[videoRendererCount];
-
         // There are no surfaces set at first.
         this.nextSurfaceTileId = 0;
 
         // Build the renderers.
         renderers = ourCustomRenderersFactory.createRenderers(mainHandler,
-                videoDebugListener,
-                audioDebugListener,
-                textOutput,
-                metadataOutput);
+                componentListener,
+                componentListener,
+                componentListener,
+                componentListener);
 
         // Obtain counts of audio renderers. We already know the number of video renderers.
         int audioRendererCount = 0;
@@ -249,7 +254,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
                     message = new PlayerMessage(this,
                             renderer,
                             Timeline.EMPTY,
-                            0,clock, Looper.myLooper())
+                            0,Clock.DEFAULT, Looper.myLooper())
                             .setType(Renderer.MSG_SET_SCALING_MODE)
                             .setLooper(Looper.myLooper())
                             .setPayload(videoScalingMode);
@@ -303,7 +308,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void clearVideoSurfaceHolder(@Nullable @org.jetbrains.annotations.Nullable SurfaceHolder surfaceHolder) {
-
+        player.clearVideoSurfaceHolder(surfaceHolder);
     }
 
     /**
@@ -318,7 +323,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void clearVideoSurfaceView(@Nullable @org.jetbrains.annotations.Nullable SurfaceView surfaceView) {
-
+        player.clearVideoSurfaceView(surfaceView);
     }
 
     /**
@@ -344,52 +349,52 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void clearVideoTextureView(@Nullable @org.jetbrains.annotations.Nullable TextureView textureView) {
-
+        player.clearVideoTextureView(textureView);
     }
 
     @Override
     public VideoSize getVideoSize() {
-        return null;
+        return player.getVideoSize();
     }
 
     @Override
     public List<Cue> getCurrentCues() {
-        return null;
+        return player.getCurrentCues();
     }
 
     @Override
     public DeviceInfo getDeviceInfo() {
-        return null;
+        return player.getDeviceInfo();
     }
 
     @Override
     public int getDeviceVolume() {
-        return 0;
+        return player.getDeviceVolume();
     }
 
     @Override
     public boolean isDeviceMuted() {
-        return false;
+        return player.isDeviceMuted();
     }
 
     @Override
     public void setDeviceVolume(int volume) {
-
+        player.setDeviceVolume(volume);
     }
 
     @Override
     public void increaseDeviceVolume() {
-
+        player.increaseDeviceVolume();
     }
 
     @Override
     public void decreaseDeviceVolume() {
-
+        player.decreaseDeviceVolume();
     }
 
     @Override
     public void setDeviceMuted(boolean muted) {
-
+        player.setDeviceMuted(muted);
     }
 
     /**
@@ -413,7 +418,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
                     message = new PlayerMessage(this,
                             renderer,
                             Timeline.EMPTY,
-                            0,clock, Looper.myLooper())
+                            0,Clock.DEFAULT, Looper.myLooper())
 //                            .setType(C.MSG_SET_STREAM_TYPE)
 //                            .setLooper(Looper.myLooper())
                             .setPayload(audioStreamType);
@@ -445,7 +450,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
                     message = new PlayerMessage(this,
                             renderer,
                             Timeline.EMPTY,
-                            0,clock, Looper.myLooper())
+                            0,Clock.DEFAULT, Looper.myLooper())
                             .setType(Renderer.MSG_SET_VOLUME)
 //                            .setLooper(Looper.myLooper())
                             .setPayload(audioVolume);
@@ -464,12 +469,12 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void clearVideoSurface() {
-
+        player.clearVideoSurface();
     }
 
     @Override
     public void clearVideoSurface(@Nullable @org.jetbrains.annotations.Nullable Surface surface) {
-
+        player.clearVideoSurface(surface);
     }
 
     /**
@@ -497,7 +502,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
                     message = new PlayerMessage(this,
                             renderer,
                             Timeline.EMPTY,
-                            0,clock, Looper.myLooper())
+                            0,Clock.DEFAULT, Looper.myLooper())
 //                            .setType(C.MSG_SET_PLAYBACK_PARAMS)
 //                            .setLooper(Looper.myLooper())
                             .setPayload(params);
@@ -617,7 +622,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public Looper getApplicationLooper() {
-        return null;
+        return player.getApplicationLooper();
     }
 
     @Override
@@ -627,7 +632,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void addListener(Listener listener) {
-
+        player.addListener(listener);
     }
 
     @Override
@@ -637,97 +642,97 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void removeListener(Listener listener) {
-
+        player.removeListener(listener);
     }
 
     @Override
     public void setMediaItems(List<MediaItem> mediaItems) {
-
+        player.setMediaItems(mediaItems);
     }
 
     @Override
     public void setMediaItems(List<MediaItem> mediaItems, boolean resetPosition) {
-
+        player.setMediaItems(mediaItems, resetPosition);
     }
 
     @Override
     public void setMediaItems(List<MediaItem> mediaItems, int startWindowIndex, long startPositionMs) {
-
+        player.setMediaItems(mediaItems, startWindowIndex,startPositionMs);
     }
 
     @Override
     public void setMediaItem(MediaItem mediaItem) {
-
+        player.setMediaItem(mediaItem);
     }
 
     @Override
     public void setMediaItem(MediaItem mediaItem, long startPositionMs) {
-
+        player.setMediaItem(mediaItem,startPositionMs);
     }
 
     @Override
     public void setMediaItem(MediaItem mediaItem, boolean resetPosition) {
-
+        player.setMediaItem(mediaItem,resetPosition);
     }
 
     @Override
     public void addMediaItem(MediaItem mediaItem) {
-
+        player.addMediaItem(mediaItem);
     }
 
     @Override
     public void addMediaItem(int index, MediaItem mediaItem) {
-
+        player.addMediaItem(index,mediaItem);
     }
 
     @Override
     public void addMediaItems(List<MediaItem> mediaItems) {
-
+        player.addMediaItems(mediaItems);
     }
 
     @Override
     public void addMediaItems(int index, List<MediaItem> mediaItems) {
-
+        player.addMediaItems(index,mediaItems);
     }
 
     @Override
     public void moveMediaItem(int currentIndex, int newIndex) {
-
+        player.moveMediaItem(currentIndex,newIndex);
     }
 
     @Override
     public void moveMediaItems(int fromIndex, int toIndex, int newIndex) {
-
+        player.moveMediaItems(fromIndex,toIndex,newIndex);
     }
 
     @Override
     public void removeMediaItem(int index) {
-
+        player.removeMediaItem(index);
     }
 
     @Override
     public void removeMediaItems(int fromIndex, int toIndex) {
-
+        player.removeMediaItems(fromIndex,toIndex);
     }
 
     @Override
     public void clearMediaItems() {
-
+        player.clearMediaItems();
     }
 
     @Override
     public boolean isCommandAvailable(int command) {
-        return false;
+        return player.isCommandAvailable(command);
     }
 
     @Override
     public Commands getAvailableCommands() {
-        return null;
+        return player.getAvailableCommands();
     }
 
     @Override
     public void prepare() {
-
+        player.prepare();
     }
 
     @Override
@@ -742,31 +747,31 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public boolean isPlaying() {
-        return false;
+        return player.isPlaying();
     }
 
     @Nullable
     @org.jetbrains.annotations.Nullable
     @Override
     public ExoPlaybackException getPlayerError() {
-        return null;
+        return player.getPlayerError();
     }
 
     @Nullable
     @org.jetbrains.annotations.Nullable
     @Override
     public ExoPlaybackException getPlaybackError() {
-        return null;
+        return player.getPlaybackError();
     }
 
     @Override
     public void play() {
-
+        player.play();
     }
 
     @Override
     public void pause() {
-
+        player.pause();
     }
 
     @Override
@@ -781,97 +786,97 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void setMediaSources(List<MediaSource> mediaSources) {
-
+        player.setMediaSources(mediaSources);
     }
 
     @Override
     public void setMediaSources(List<MediaSource> mediaSources, boolean resetPosition) {
-
+        player.setMediaSources(mediaSources);
     }
 
     @Override
     public void setMediaSources(List<MediaSource> mediaSources, int startWindowIndex, long startPositionMs) {
-
+        player.setMediaSources(mediaSources,startWindowIndex,startPositionMs);
     }
 
     @Override
     public void setMediaSource(MediaSource mediaSource) {
-
+        player.setMediaSource(mediaSource);
     }
 
     @Override
     public void setMediaSource(MediaSource mediaSource, long startPositionMs) {
-
+        player.setMediaSource(mediaSource,startPositionMs);
     }
 
     @Override
     public void setMediaSource(MediaSource mediaSource, boolean resetPosition) {
-
+        player.setMediaSource(mediaSource, resetPosition);
     }
 
     @Override
     public void addMediaSource(MediaSource mediaSource) {
-
+        player.addMediaSource(mediaSource);
     }
 
     @Override
     public void addMediaSource(int index, MediaSource mediaSource) {
-
+        player.addMediaSource(index,mediaSource);
     }
 
     @Override
     public void addMediaSources(List<MediaSource> mediaSources) {
-
+        player.addMediaSources(mediaSources);
     }
 
     @Override
     public void addMediaSources(int index, List<MediaSource> mediaSources) {
-
+        player.addMediaSources(index, mediaSources);
     }
 
     @Override
     public void setShuffleOrder(ShuffleOrder shuffleOrder) {
-
+        player.setShuffleOrder(shuffleOrder);
     }
 
     @Override
     public PlayerMessage createMessage(PlayerMessage.Target target) {
-        return null;
+        return player.createMessage(target);
     }
 
     @Override
     public void setSeekParameters(@Nullable @org.jetbrains.annotations.Nullable SeekParameters seekParameters) {
-
+        player.setSeekParameters(seekParameters);
     }
 
     @Override
     public SeekParameters getSeekParameters() {
-        return null;
+        return player.getSeekParameters();
     }
 
     @Override
     public void setForegroundMode(boolean foregroundMode) {
-
+        player.setForegroundMode(foregroundMode);
     }
 
     @Override
     public void setPauseAtEndOfMediaItems(boolean pauseAtEndOfMediaItems) {
-
+        player.setPauseAtEndOfMediaItems(pauseAtEndOfMediaItems);
     }
 
     @Override
     public boolean getPauseAtEndOfMediaItems() {
-        return false;
+        return player.getPauseAtEndOfMediaItems();
     }
 
     @Override
     public void experimentalSetOffloadSchedulingEnabled(boolean offloadSchedulingEnabled) {
-
+        player.experimentalSetOffloadSchedulingEnabled(offloadSchedulingEnabled);
     }
 
     @Override
     public boolean experimentalIsSleepingForOffload() {
-        return false;
+        return player.experimentalIsSleepingForOffload();
     }
 
     @Override
@@ -886,7 +891,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void setRepeatMode(int repeatMode) {
-
+        player.setRepeatMode(repeatMode);
     }
 
     @Override
@@ -896,12 +901,12 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void setShuffleModeEnabled(boolean shuffleModeEnabled) {
-
+        player.setShuffleModeEnabled(shuffleModeEnabled);
     }
 
     @Override
     public boolean getShuffleModeEnabled() {
-        return false;
+        return player.getShuffleModeEnabled();
     }
 
     @Override
@@ -931,37 +936,37 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public boolean hasPrevious() {
-        return false;
+        return player.hasPrevious();
     }
 
     @Override
     public void previous() {
-
+        player.previous();
     }
 
     @Override
     public boolean hasNext() {
-        return false;
+        return player.hasNext();
     }
 
     @Override
     public void next() {
-
+        player.next();
     }
 
     @Override
     public void setPlaybackParameters(PlaybackParameters playbackParameters) {
-
+        player.setPlaybackParameters(playbackParameters);
     }
 
     @Override
     public void setPlaybackSpeed(float speed) {
-
+        player.setPlaybackSpeed(speed);
     }
 
     @Override
     public PlaybackParameters getPlaybackParameters() {
-        return null;
+        return player.getPlaybackParameters();
     }
 
     @Override
@@ -971,7 +976,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void stop(boolean reset) {
-
+        player.stop(reset);
     }
 
     /**
@@ -1045,12 +1050,12 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     @Override
     public void addAudioOffloadListener(AudioOffloadListener listener) {
-
+        player.addAudioOffloadListener(listener);
     }
 
     @Override
     public void removeAudioOffloadListener(AudioOffloadListener listener) {
-
+        player.addAudioOffloadListener(listener);
     }
 
     @Override
@@ -1081,9 +1086,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
     }
 
     @Override
-    public void retry() {
-
-    }
+    public void retry() {player.retry();}
 
     @Override
     public TrackGroupArray getCurrentTrackGroups() {
@@ -1279,7 +1282,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
                 sendMessage(new PlayerMessage(this,
                         renderer,
                         Timeline.EMPTY,
-                        0,clock, Looper.myLooper())
+                        0,Clock.DEFAULT, Looper.myLooper())
                         .setType(Renderer.MSG_SET_VIDEO_OUTPUT)
 //                        .setLooper(Looper.myLooper())
                         .setPayload(surface));
@@ -1483,7 +1486,7 @@ public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
         }
 
     }
-
+    public ExoPlayer getPlayer(){return this.player;}
     /**
      * A listener for video rendering information from a {@link TiledExoPlayer}.
      */
