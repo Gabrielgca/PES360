@@ -1,4 +1,0 @@
-br/com/vr/pes360/PlayerActivity.java
- br.com.vr.pes360.PlayerActivity
-br/com/vr/pes360/BuildConfig.java
- br.com.vr.pes360.BuildConfig
