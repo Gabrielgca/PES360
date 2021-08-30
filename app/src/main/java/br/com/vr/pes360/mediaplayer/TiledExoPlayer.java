@@ -26,6 +26,9 @@ import android.media.MediaCodec;
 import android.media.PlaybackParams;
 import android.os.Handler;
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+
+import android.os.Looper;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -33,44 +36,61 @@ import android.view.SurfaceView;
 import android.view.TextureView;
 
 import com.google.android.exoplayer2.C;
+import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.LoadControl;
+import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.MediaMetadata;
+import com.google.android.exoplayer2.PlaybackParameters;
+import com.google.android.exoplayer2.PlayerMessage;
 import com.google.android.exoplayer2.Renderer;
 import com.google.android.exoplayer2.RenderersFactory;
+import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.analytics.AnalyticsCollector;
+import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.audio.AudioCapabilities;
 import com.google.android.exoplayer2.audio.AudioProcessor;
 import com.google.android.exoplayer2.audio.AudioRendererEventListener;
 import com.google.android.exoplayer2.audio.MediaCodecAudioRenderer;
 import com.google.android.exoplayer2.decoder.DecoderCounters;
+import com.google.android.exoplayer2.device.DeviceInfo;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
 import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
 import com.google.android.exoplayer2.mediacodec.MediaCodecSelector;
 import com.google.android.exoplayer2.metadata.Metadata;
+import com.google.android.exoplayer2.metadata.MetadataOutput;
 import com.google.android.exoplayer2.metadata.MetadataRenderer;
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.MediaSourceFactory;
+import com.google.android.exoplayer2.source.ShuffleOrder;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.text.Cue;
+import com.google.android.exoplayer2.text.TextOutput;
 import com.google.android.exoplayer2.text.TextRenderer;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.trackselection.TrackSelector;
 import com.google.android.exoplayer2.upstream.BandwidthMeter;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
+import com.google.android.exoplayer2.util.Clock;
 import com.google.android.exoplayer2.video.MediaCodecVideoRenderer;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
+import com.google.android.exoplayer2.video.VideoSize;
+
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Constructor;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
+
+import br.com.vr.pes360.mediaplayer.renderers_factory.OurCustomRenderersFactory;
 
 /**
  * This class is based on SimpleExoPlayer, and provides an {@link ExoPlayer} implementation.
@@ -82,7 +102,7 @@ import java.util.concurrent.Semaphore;
  * Created by Giuseppe Samela on 12/04/17.
  */
 
-public class TiledExoPlayer implements ExoPlayer {
+public class TiledExoPlayer implements ExoPlayer, PlayerMessage.Sender {
 
     /**
      * Modes for using extension renderers.
@@ -118,11 +138,13 @@ public class TiledExoPlayer implements ExoPlayer {
 
     protected static final int MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY = 50;
 
+    private Clock clock;
     private final ExoPlayer player;
     private final Renderer[] renderers;
     private final ComponentListener componentListener;
     private final Handler mainHandler;
     private final int videoRendererCount;
+    private OurCustomRenderersFactory ourCustomRenderersFactory;
     private final int audioRendererCount;
     private final Semaphore surfaceInitSemaphore = new Semaphore(1, true);
 
@@ -138,8 +160,8 @@ public class TiledExoPlayer implements ExoPlayer {
     private int videoScalingMode;
     private SurfaceHolder surfaceHolder;
     private TextureView textureView;
-    private TextRenderer.Output textOutput;
-    private MetadataRenderer.Output metadataOutput;
+    private TextOutput textOutput;
+    private MetadataOutput metadataOutput;
     private VideoListener videoListener;
     private AudioRendererEventListener audioDebugListener;
     private VideoRendererEventListener videoDebugListener;
@@ -163,12 +185,12 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     //CRIAÇÃO DE NOVO CONSTRUTOR
     public TiledExoPlayer(Context context, int videoRendererCount,
-                          RenderersFactory renderersFactory, MediaSourceFactory mediaSourceFactory,
+                           MediaSourceFactory mediaSourceFactory,
                           TrackSelector trackSelector, LoadControl loadControl,
                           BandwidthMeter bandwidthMeter, AnalyticsCollector analyticsCollector) {
-        mainHandler = new Handler();
+        mainHandler = new Handler(Looper.myLooper());
         componentListener = new ComponentListener();
-
+        ourCustomRenderersFactory = new OurCustomRenderersFactory(context, videoRendererCount);
         // The number of video renderers should be provided to the class constructor.
         this.videoRendererCount = videoRendererCount;
 
@@ -179,10 +201,11 @@ public class TiledExoPlayer implements ExoPlayer {
         this.nextSurfaceTileId = 0;
 
         // Build the renderers.
-        ArrayList<Renderer> renderersList = new ArrayList<>();
-        buildRenderers(context, mainHandler, /*drmSessionManager*/ null, EXTENSION_RENDERER_MODE_OFF,
-                DEFAULT_ALLOWED_VIDEO_JOINING_TIME_MS, renderersList);
-        renderers = renderersList.toArray(new Renderer[renderersList.size()]);
+        renderers = ourCustomRenderersFactory.createRenderers(mainHandler,
+                videoDebugListener,
+                audioDebugListener,
+                textOutput,
+                metadataOutput);
 
         // Obtain counts of audio renderers. We already know the number of video renderers.
         int audioRendererCount = 0;
@@ -202,7 +225,7 @@ public class TiledExoPlayer implements ExoPlayer {
 
         // Build the player and associated objects.
         //MUDANÇA PARA NOVO MÉTODO
-        player = new SimpleExoPlayer.Builder(context, renderersFactory, trackSelector,
+        player = new SimpleExoPlayer.Builder(context, ourCustomRenderersFactory, trackSelector,
                 mediaSourceFactory, loadControl, bandwidthMeter,
                 analyticsCollector).build();
 
@@ -219,15 +242,21 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public void setVideoScalingMode(@C.VideoScalingMode int videoScalingMode) {
         this.videoScalingMode = videoScalingMode;
-        ExoPlayerMessage[] messages = new ExoPlayerMessage[videoRendererCount];
-        int count = 0;
-        for (Renderer renderer : renderers) {
-            if (renderer.getTrackType() == C.TRACK_TYPE_VIDEO) {
-                messages[count++] = new ExoPlayerMessage(renderer, C.MSG_SET_SCALING_MODE,
-                        videoScalingMode);
+        PlayerMessage[] messages = new PlayerMessage[videoRendererCount];
+        for (PlayerMessage message : messages) {
+            for (Renderer renderer : renderers) {
+                if (renderer.getTrackType() == C.TRACK_TYPE_VIDEO) {
+                    message = new PlayerMessage(this,
+                            renderer,
+                            Timeline.EMPTY,
+                            0,clock, Looper.myLooper())
+                            .setType(Renderer.MSG_SET_SCALING_MODE)
+                            .setLooper(Looper.myLooper())
+                            .setPayload(videoScalingMode);
+                    sendMessage(message);
+                }
             }
         }
-        player.sendMessages(messages);
     }
 
     /**
@@ -272,6 +301,11 @@ public class TiledExoPlayer implements ExoPlayer {
         }
     }
 
+    @Override
+    public void clearVideoSurfaceHolder(@Nullable @org.jetbrains.annotations.Nullable SurfaceHolder surfaceHolder) {
+
+    }
+
     /**
      * Sets the {@link SurfaceView} onto which video will be rendered. The player will track the
      * lifecycle of the surface automatically.
@@ -280,6 +314,11 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public void setVideoSurfaceView(SurfaceView surfaceView) {
         setVideoSurfaceHolder(surfaceView.getHolder());
+    }
+
+    @Override
+    public void clearVideoSurfaceView(@Nullable @org.jetbrains.annotations.Nullable SurfaceView surfaceView) {
+
     }
 
     /**
@@ -303,6 +342,56 @@ public class TiledExoPlayer implements ExoPlayer {
         }
     }
 
+    @Override
+    public void clearVideoTextureView(@Nullable @org.jetbrains.annotations.Nullable TextureView textureView) {
+
+    }
+
+    @Override
+    public VideoSize getVideoSize() {
+        return null;
+    }
+
+    @Override
+    public List<Cue> getCurrentCues() {
+        return null;
+    }
+
+    @Override
+    public DeviceInfo getDeviceInfo() {
+        return null;
+    }
+
+    @Override
+    public int getDeviceVolume() {
+        return 0;
+    }
+
+    @Override
+    public boolean isDeviceMuted() {
+        return false;
+    }
+
+    @Override
+    public void setDeviceVolume(int volume) {
+
+    }
+
+    @Override
+    public void increaseDeviceVolume() {
+
+    }
+
+    @Override
+    public void decreaseDeviceVolume() {
+
+    }
+
+    @Override
+    public void setDeviceMuted(boolean muted) {
+
+    }
+
     /**
      * Sets the stream type for audio playback (see {@link C.StreamType} and
      * {@link android.media.AudioTrack#AudioTrack(int, int, int, int, int, int)}). If the stream type
@@ -316,14 +405,22 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public void setAudioStreamType(@C.StreamType int audioStreamType) {
         this.audioStreamType = audioStreamType;
-        ExoPlayerMessage[] messages = new ExoPlayerMessage[audioRendererCount];
-        int count = 0;
-        for (Renderer renderer : renderers) {
-            if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
-                messages[count++] = new ExoPlayerMessage(renderer, C.MSG_SET_STREAM_TYPE, audioStreamType);
+
+        PlayerMessage[] messages = new PlayerMessage[audioRendererCount];
+        for (PlayerMessage message : messages) {
+            for (Renderer renderer : renderers) {
+                if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
+                    message = new PlayerMessage(this,
+                            renderer,
+                            Timeline.EMPTY,
+                            0,clock, Looper.myLooper())
+//                            .setType(C.MSG_SET_STREAM_TYPE)
+//                            .setLooper(Looper.myLooper())
+                            .setPayload(audioStreamType);
+                    sendMessage(message);
+                }
             }
         }
-        player.sendMessages(messages);
     }
 
     /**
@@ -340,14 +437,22 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public void setVolume(float audioVolume) {
         this.audioVolume = audioVolume;
-        ExoPlayerMessage[] messages = new ExoPlayerMessage[audioRendererCount];
-        int count = 0;
-        for (Renderer renderer : renderers) {
-            if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
-                messages[count++] = new ExoPlayerMessage(renderer, C.MSG_SET_VOLUME, audioVolume);
+
+        PlayerMessage[] messages = new PlayerMessage[audioRendererCount];
+        for (PlayerMessage message : messages) {
+            for (Renderer renderer : renderers) {
+                if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
+                    message = new PlayerMessage(this,
+                            renderer,
+                            Timeline.EMPTY,
+                            0,clock, Looper.myLooper())
+                            .setType(Renderer.MSG_SET_VOLUME)
+//                            .setLooper(Looper.myLooper())
+                            .setPayload(audioVolume);
+                    sendMessage(message);
+                }
             }
         }
-        player.sendMessages(messages);
     }
 
     /**
@@ -355,6 +460,16 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public float getVolume() {
         return audioVolume;
+    }
+
+    @Override
+    public void clearVideoSurface() {
+
+    }
+
+    @Override
+    public void clearVideoSurface(@Nullable @org.jetbrains.annotations.Nullable Surface surface) {
+
     }
 
     /**
@@ -375,14 +490,21 @@ public class TiledExoPlayer implements ExoPlayer {
         } else {
             playbackParamsHolder = null;
         }
-        ExoPlayerMessage[] messages = new ExoPlayerMessage[audioRendererCount];
-        int count = 0;
-        for (Renderer renderer : renderers) {
-            if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
-                messages[count++] = new ExoPlayerMessage(renderer, C.MSG_SET_PLAYBACK_PARAMS, params);
+        PlayerMessage[] messages = new PlayerMessage[audioRendererCount];
+        for (PlayerMessage message : messages) {
+            for (Renderer renderer : renderers) {
+                if (renderer.getTrackType() == C.TRACK_TYPE_AUDIO) {
+                    message = new PlayerMessage(this,
+                            renderer,
+                            Timeline.EMPTY,
+                            0,clock, Looper.myLooper())
+//                            .setType(C.MSG_SET_PLAYBACK_PARAMS)
+//                            .setLooper(Looper.myLooper())
+                            .setPayload(params);
+                    sendMessage(message);
+                }
             }
         }
-        player.sendMessages(messages);
     }
 
     /**
@@ -460,7 +582,7 @@ public class TiledExoPlayer implements ExoPlayer {
      *
      * @param output The output.
      */
-    public void setTextOutput(TextRenderer.Output output) {
+    public void setTextOutput(TextOutput output) {
         textOutput = output;
     }
 
@@ -469,7 +591,7 @@ public class TiledExoPlayer implements ExoPlayer {
      *
      * @param output The output.
      */
-    public void setMetadataOutput(MetadataRenderer.Output output) {
+    public void setMetadataOutput(MetadataOutput output) {
         metadataOutput = output;
     }
 
@@ -494,8 +616,18 @@ public class TiledExoPlayer implements ExoPlayer {
     // ExoPlayer implementation
 
     @Override
+    public Looper getApplicationLooper() {
+        return null;
+    }
+
+    @Override
     public void addListener(EventListener listener) {
         player.addListener(listener);
+    }
+
+    @Override
+    public void addListener(Listener listener) {
+
     }
 
     @Override
@@ -504,8 +636,137 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
+    public void removeListener(Listener listener) {
+
+    }
+
+    @Override
+    public void setMediaItems(List<MediaItem> mediaItems) {
+
+    }
+
+    @Override
+    public void setMediaItems(List<MediaItem> mediaItems, boolean resetPosition) {
+
+    }
+
+    @Override
+    public void setMediaItems(List<MediaItem> mediaItems, int startWindowIndex, long startPositionMs) {
+
+    }
+
+    @Override
+    public void setMediaItem(MediaItem mediaItem) {
+
+    }
+
+    @Override
+    public void setMediaItem(MediaItem mediaItem, long startPositionMs) {
+
+    }
+
+    @Override
+    public void setMediaItem(MediaItem mediaItem, boolean resetPosition) {
+
+    }
+
+    @Override
+    public void addMediaItem(MediaItem mediaItem) {
+
+    }
+
+    @Override
+    public void addMediaItem(int index, MediaItem mediaItem) {
+
+    }
+
+    @Override
+    public void addMediaItems(List<MediaItem> mediaItems) {
+
+    }
+
+    @Override
+    public void addMediaItems(int index, List<MediaItem> mediaItems) {
+
+    }
+
+    @Override
+    public void moveMediaItem(int currentIndex, int newIndex) {
+
+    }
+
+    @Override
+    public void moveMediaItems(int fromIndex, int toIndex, int newIndex) {
+
+    }
+
+    @Override
+    public void removeMediaItem(int index) {
+
+    }
+
+    @Override
+    public void removeMediaItems(int fromIndex, int toIndex) {
+
+    }
+
+    @Override
+    public void clearMediaItems() {
+
+    }
+
+    @Override
+    public boolean isCommandAvailable(int command) {
+        return false;
+    }
+
+    @Override
+    public Commands getAvailableCommands() {
+        return null;
+    }
+
+    @Override
+    public void prepare() {
+
+    }
+
+    @Override
     public int getPlaybackState() {
         return player.getPlaybackState();
+    }
+
+    @Override
+    public int getPlaybackSuppressionReason() {
+        return player.PLAYBACK_SUPPRESSION_REASON_NONE;
+    }
+
+    @Override
+    public boolean isPlaying() {
+        return false;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public ExoPlaybackException getPlayerError() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public ExoPlaybackException getPlaybackError() {
+        return null;
+    }
+
+    @Override
+    public void play() {
+
+    }
+
+    @Override
+    public void pause() {
+
     }
 
     @Override
@@ -519,6 +780,101 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
+    public void setMediaSources(List<MediaSource> mediaSources) {
+
+    }
+
+    @Override
+    public void setMediaSources(List<MediaSource> mediaSources, boolean resetPosition) {
+
+    }
+
+    @Override
+    public void setMediaSources(List<MediaSource> mediaSources, int startWindowIndex, long startPositionMs) {
+
+    }
+
+    @Override
+    public void setMediaSource(MediaSource mediaSource) {
+
+    }
+
+    @Override
+    public void setMediaSource(MediaSource mediaSource, long startPositionMs) {
+
+    }
+
+    @Override
+    public void setMediaSource(MediaSource mediaSource, boolean resetPosition) {
+
+    }
+
+    @Override
+    public void addMediaSource(MediaSource mediaSource) {
+
+    }
+
+    @Override
+    public void addMediaSource(int index, MediaSource mediaSource) {
+
+    }
+
+    @Override
+    public void addMediaSources(List<MediaSource> mediaSources) {
+
+    }
+
+    @Override
+    public void addMediaSources(int index, List<MediaSource> mediaSources) {
+
+    }
+
+    @Override
+    public void setShuffleOrder(ShuffleOrder shuffleOrder) {
+
+    }
+
+    @Override
+    public PlayerMessage createMessage(PlayerMessage.Target target) {
+        return null;
+    }
+
+    @Override
+    public void setSeekParameters(@Nullable @org.jetbrains.annotations.Nullable SeekParameters seekParameters) {
+
+    }
+
+    @Override
+    public SeekParameters getSeekParameters() {
+        return null;
+    }
+
+    @Override
+    public void setForegroundMode(boolean foregroundMode) {
+
+    }
+
+    @Override
+    public void setPauseAtEndOfMediaItems(boolean pauseAtEndOfMediaItems) {
+
+    }
+
+    @Override
+    public boolean getPauseAtEndOfMediaItems() {
+        return false;
+    }
+
+    @Override
+    public void experimentalSetOffloadSchedulingEnabled(boolean offloadSchedulingEnabled) {
+
+    }
+
+    @Override
+    public boolean experimentalIsSleepingForOffload() {
+        return false;
+    }
+
+    @Override
     public void setPlayWhenReady(boolean playWhenReady) {
         player.setPlayWhenReady(playWhenReady);
     }
@@ -526,6 +882,26 @@ public class TiledExoPlayer implements ExoPlayer {
     @Override
     public boolean getPlayWhenReady() {
         return player.getPlayWhenReady();
+    }
+
+    @Override
+    public void setRepeatMode(int repeatMode) {
+
+    }
+
+    @Override
+    public int getRepeatMode() {
+        return player.REPEAT_MODE_OFF;
+    }
+
+    @Override
+    public void setShuffleModeEnabled(boolean shuffleModeEnabled) {
+
+    }
+
+    @Override
+    public boolean getShuffleModeEnabled() {
+        return false;
     }
 
     @Override
@@ -554,8 +930,48 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
+    public boolean hasPrevious() {
+        return false;
+    }
+
+    @Override
+    public void previous() {
+
+    }
+
+    @Override
+    public boolean hasNext() {
+        return false;
+    }
+
+    @Override
+    public void next() {
+
+    }
+
+    @Override
+    public void setPlaybackParameters(PlaybackParameters playbackParameters) {
+
+    }
+
+    @Override
+    public void setPlaybackSpeed(float speed) {
+
+    }
+
+    @Override
+    public PlaybackParameters getPlaybackParameters() {
+        return null;
+    }
+
+    @Override
     public void stop() {
         player.stop();
+    }
+
+    @Override
+    public void stop(boolean reset) {
+
     }
 
     /**
@@ -583,13 +999,58 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
-    public void sendMessages(ExoPlayerMessage... messages) {
-        player.sendMessages(messages);
+    public void sendMessage(PlayerMessage messages) {
+        mainHandler.obtainMessage(0, messages).sendToTarget();
+    }
+
+//    @Override
+//    public void blockingSendMessages(ExoPlayerMessage... messages) {
+//        player.blockingSendMessages(messages);
+//    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public AudioComponent getAudioComponent() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public VideoComponent getVideoComponent() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public TextComponent getTextComponent() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public MetadataComponent getMetadataComponent() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public DeviceComponent getDeviceComponent() {
+        return null;
     }
 
     @Override
-    public void blockingSendMessages(ExoPlayerMessage... messages) {
-        player.blockingSendMessages(messages);
+    public void addAudioOffloadListener(AudioOffloadListener listener) {
+
+    }
+
+    @Override
+    public void removeAudioOffloadListener(AudioOffloadListener listener) {
+
     }
 
     @Override
@@ -602,6 +1063,28 @@ public class TiledExoPlayer implements ExoPlayer {
         return player.getRendererType(index);
     }
 
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public TrackSelector getTrackSelector() {
+        return null;
+    }
+
+    @Override
+    public Looper getPlaybackLooper() {
+        return null;
+    }
+
+    @Override
+    public Clock getClock() {
+        return null;
+    }
+
+    @Override
+    public void retry() {
+
+    }
+
     @Override
     public TrackGroupArray getCurrentTrackGroups() {
         return player.getCurrentTrackGroups();
@@ -610,6 +1093,16 @@ public class TiledExoPlayer implements ExoPlayer {
     @Override
     public TrackSelectionArray getCurrentTrackSelections() {
         return player.getCurrentTrackSelections();
+    }
+
+    @Override
+    public List<Metadata> getCurrentStaticMetadata() {
+        return null;
+    }
+
+    @Override
+    public MediaMetadata getMediaMetadata() {
+        return null;
     }
 
     @Override
@@ -633,6 +1126,40 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
+    public int getNextWindowIndex() {
+        return 0;
+    }
+
+    @Override
+    public int getPreviousWindowIndex() {
+        return 0;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public Object getCurrentTag() {
+        return null;
+    }
+
+    @Nullable
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public MediaItem getCurrentMediaItem() {
+        return null;
+    }
+
+    @Override
+    public int getMediaItemCount() {
+        return 0;
+    }
+
+    @Override
+    public MediaItem getMediaItemAt(int index) {
+        return null;
+    }
+
+    @Override
     public long getDuration() {
         return player.getDuration();
     }
@@ -653,8 +1180,23 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     @Override
+    public long getTotalBufferedDuration() {
+        return 0;
+    }
+
+    @Override
     public boolean isCurrentWindowDynamic() {
         return player.isCurrentWindowDynamic();
+    }
+
+    @Override
+    public boolean isCurrentWindowLive() {
+        return false;
+    }
+
+    @Override
+    public long getCurrentLiveOffset() {
+        return 0;
     }
 
     @Override
@@ -662,180 +1204,41 @@ public class TiledExoPlayer implements ExoPlayer {
         return player.isCurrentWindowSeekable();
     }
 
-    // Renderer building.
-
-    private void buildRenderers(Context context, Handler mainHandler,
-                                DrmSessionManager drmSessionManager,
-                                @ExtensionRendererMode int extensionRendererMode, long allowedVideoJoiningTimeMs,
-                                ArrayList<Renderer> out) {
-        buildVideoRenderers(context, mainHandler, drmSessionManager, extensionRendererMode,
-                componentListener, allowedVideoJoiningTimeMs, out);
-        buildAudioRenderers(context, mainHandler, drmSessionManager, extensionRendererMode,
-                componentListener, buildAudioProcessors(), out);
-        buildTextRenderers(context, mainHandler, extensionRendererMode, componentListener, out);
-        buildMetadataRenderers(context, mainHandler, extensionRendererMode, componentListener, out);
-        buildMiscellaneousRenderers(context, mainHandler, extensionRendererMode, out);
+    @Override
+    public boolean isPlayingAd() {
+        return false;
     }
 
-    /**
-     * Builds video renderers for use by the player.
-     *
-     * @param context The {@link Context} associated with the player.
-     * @param mainHandler A handler associated with the main thread's looper.
-     * @param drmSessionManager An optional {@link DrmSessionManager}. May be null if the player will
-     *     not be used for DRM protected playbacks.
-     * @param extensionRendererMode The extension renderer mode.
-     * @param eventListener An event listener.
-     * @param allowedVideoJoiningTimeMs The maximum duration in milliseconds for which video renderers
-     *     can attempt to seamlessly join an ongoing playback.
-     * @param out An array to which the built renderers should be appended.
-     */
-    protected void buildVideoRenderers(Context context, Handler mainHandler,
-                                       DrmSessionManager<FrameworkMediaCrypto> drmSessionManager,
-                                       @ExtensionRendererMode int extensionRendererMode, VideoRendererEventListener eventListener,
-                                       long allowedVideoJoiningTimeMs, ArrayList<Renderer> out) {
-        for (int i = 0; i < videoRendererCount; i++)
-            out.add(new MediaCodecVideoRenderer(context, MediaCodecSelector.DEFAULT,
-                    allowedVideoJoiningTimeMs, drmSessionManager, false, mainHandler, eventListener,
-                    MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY));
-
-        if (extensionRendererMode == EXTENSION_RENDERER_MODE_OFF) {
-            return;
-        }
-        int extensionRendererIndex = out.size();
-        if (extensionRendererMode == EXTENSION_RENDERER_MODE_PREFER) {
-            extensionRendererIndex--;
-        }
-        try {
-            Class<?> clazz =
-                    Class.forName("com.google.android.exoplayer2.ext.vp9.LibvpxVideoRenderer");
-            Constructor<?> constructor = clazz.getConstructor(boolean.class, long.class, Handler.class,
-                    VideoRendererEventListener.class, int.class);
-            Renderer renderer = (Renderer) constructor.newInstance(true, allowedVideoJoiningTimeMs,
-                    mainHandler, componentListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
-            out.add(extensionRendererIndex++, renderer);
-            Log.i(TAG, "Loaded LibvpxVideoRenderer.");
-        } catch (ClassNotFoundException e) {
-            // Expected if the app was built without the extension.
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    @Override
+    public int getCurrentAdGroupIndex() {
+        return 0;
     }
 
-    /**
-     * Builds audio renderers for use by the player.
-     *
-     * @param context The {@link Context} associated with the player.
-     * @param mainHandler A handler associated with the main thread's looper.
-     * @param drmSessionManager An optional {@link DrmSessionManager}. May be null if the player will
-     *     not be used for DRM protected playbacks.
-     * @param extensionRendererMode The extension renderer mode.
-     * @param eventListener An event listener.
-     * @param audioProcessors An array of {@link AudioProcessor}s that will process PCM audio buffers
-     *     before output. May be empty.
-     * @param out An array to which the built renderers should be appended.
-     */
-    protected void buildAudioRenderers(Context context, Handler mainHandler,
-                                       DrmSessionManager<FrameworkMediaCrypto> drmSessionManager,
-                                       @ExtensionRendererMode int extensionRendererMode, AudioRendererEventListener eventListener,
-                                       AudioProcessor[] audioProcessors, ArrayList<Renderer> out) {
-        out.add(new MediaCodecAudioRenderer(MediaCodecSelector.DEFAULT, drmSessionManager, true,
-                mainHandler, eventListener, AudioCapabilities.getCapabilities(context), audioProcessors));
-
-        if (extensionRendererMode == EXTENSION_RENDERER_MODE_OFF) {
-            return;
-        }
-        int extensionRendererIndex = out.size();
-        if (extensionRendererMode == EXTENSION_RENDERER_MODE_PREFER) {
-            extensionRendererIndex--;
-        }
-
-        try {
-            Class<?> clazz =
-                    Class.forName("com.google.android.exoplayer2.ext.opus.LibopusAudioRenderer");
-            Constructor<?> constructor = clazz.getConstructor(Handler.class,
-                    AudioRendererEventListener.class, AudioProcessor[].class);
-            Renderer renderer = (Renderer) constructor.newInstance(mainHandler, componentListener,
-                    audioProcessors);
-            out.add(extensionRendererIndex++, renderer);
-            Log.i(TAG, "Loaded LibopusAudioRenderer.");
-        } catch (ClassNotFoundException e) {
-            // Expected if the app was built without the extension.
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        try {
-            Class<?> clazz =
-                    Class.forName("com.google.android.exoplayer2.ext.flac.LibflacAudioRenderer");
-            Constructor<?> constructor = clazz.getConstructor(Handler.class,
-                    AudioRendererEventListener.class, AudioProcessor[].class);
-            Renderer renderer = (Renderer) constructor.newInstance(mainHandler, componentListener,
-                    audioProcessors);
-            out.add(extensionRendererIndex++, renderer);
-            Log.i(TAG, "Loaded LibflacAudioRenderer.");
-        } catch (ClassNotFoundException e) {
-            // Expected if the app was built without the extension.
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        try {
-            Class<?> clazz =
-                    Class.forName("com.google.android.exoplayer2.ext.ffmpeg.FfmpegAudioRenderer");
-            Constructor<?> constructor = clazz.getConstructor(Handler.class,
-                    AudioRendererEventListener.class, AudioProcessor[].class);
-            Renderer renderer = (Renderer) constructor.newInstance(mainHandler, componentListener,
-                    audioProcessors);
-            out.add(extensionRendererIndex++, renderer);
-            Log.i(TAG, "Loaded FfmpegAudioRenderer.");
-        } catch (ClassNotFoundException e) {
-            // Expected if the app was built without the extension.
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    @Override
+    public int getCurrentAdIndexInAdGroup() {
+        return 0;
     }
 
-    /**
-     * Builds text renderers for use by the player.
-     *  @param context The {@link Context} associated with the player.
-     * @param mainHandler A handler associated with the main thread's looper.
-     * @param extensionRendererMode The extension renderer mode.
-     * @param output An output for the renderers.
-     * @param out An array to which the built renderers should be appended.
-     */
-    protected void buildTextRenderers(Context context, Handler mainHandler,
-                                      @ExtensionRendererMode int extensionRendererMode, ComponentListener output,
-                                      ArrayList<Renderer> out) {
-        out.add(new TextRenderer(output, mainHandler.getLooper()));
+    @Override
+    public long getContentDuration() {
+        return 0;
     }
 
-    /**
-     * Builds metadata renderers for use by the player.
-     *  @param context The {@link Context} associated with the player.
-     * @param mainHandler A handler associated with the main thread's looper.
-     * @param extensionRendererMode The extension renderer mode.
-     * @param output An output for the renderers.
-     * @param out An array to which the built renderers should be appended.
-     */
-    protected void buildMetadataRenderers(Context context, Handler mainHandler,
-                                          @ExtensionRendererMode int extensionRendererMode, ComponentListener output,
-                                          ArrayList<Renderer> out) {
-        out.add(new MetadataRenderer(output, mainHandler.getLooper()));
+    @Override
+    public long getContentPosition() {
+        return 0;
     }
 
-    /**
-     * Builds any miscellaneous renderers used by the player.
-     *
-     * @param context The {@link Context} associated with the player.
-     * @param mainHandler A handler associated with the main thread's looper.
-     * @param extensionRendererMode The extension renderer mode.
-     * @param out An array to which the built renderers should be appended.
-     */
-    protected void buildMiscellaneousRenderers(Context context, Handler mainHandler,
-                                               @ExtensionRendererMode int extensionRendererMode, ArrayList<Renderer> out) {
-        // Do nothing.
+    @Override
+    public long getContentBufferedPosition() {
+        return 0;
     }
+
+    @Override
+    public AudioAttributes getAudioAttributes() {
+        return null;
+    }
+
 
     /**
      * Builds an array of {@link AudioProcessor}s that will process PCM audio before output.
@@ -870,9 +1273,16 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     private void setVideoSurfaceInternal(Surface surface, boolean ownsSurface) {
         int count = 0;
+
         for (Renderer renderer : renderers) {
             if (renderer.getTrackType() == C.TRACK_TYPE_VIDEO && count == nextSurfaceTileId) {
-                player.sendMessages(new ExoPlayer.ExoPlayerMessage(renderer, C.MSG_SET_SURFACE, surface));
+                sendMessage(new PlayerMessage(this,
+                        renderer,
+                        Timeline.EMPTY,
+                        0,clock, Looper.myLooper())
+                        .setType(Renderer.MSG_SET_VIDEO_OUTPUT)
+//                        .setLooper(Looper.myLooper())
+                        .setPayload(surface));
                 surfaces[nextSurfaceTileId]=surface;
                 break;
             } else {
@@ -884,7 +1294,7 @@ public class TiledExoPlayer implements ExoPlayer {
     }
 
     private final class ComponentListener implements VideoRendererEventListener,
-            AudioRendererEventListener, TextRenderer.Output, MetadataRenderer.Output,
+            AudioRendererEventListener, TextOutput, MetadataOutput,
             SurfaceHolder.Callback, TextureView.SurfaceTextureListener {
 
         // VideoRendererEventListener implementation
@@ -922,25 +1332,22 @@ public class TiledExoPlayer implements ExoPlayer {
         }
 
         @Override
-        public void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees,
-                                       float pixelWidthHeightRatio) {
+        public void onVideoSizeChanged(VideoSize videoSize) {
             if (videoListener != null) {
-                videoListener.onVideoSizeChanged(width, height, unappliedRotationDegrees,
-                        pixelWidthHeightRatio);
+                videoListener.onVideoSizeChanged(videoSize);
             }
             if (videoDebugListener != null) {
-                videoDebugListener.onVideoSizeChanged(width, height, unappliedRotationDegrees,
-                        pixelWidthHeightRatio);
+                videoDebugListener.onVideoSizeChanged(videoSize);
             }
         }
 
         @Override
-        public void onRenderedFirstFrame(Surface surface) {
+        public void onRenderedFirstFrame(Object output, long renderTimeMs) {
             if (videoListener != null /*&& TiledExoPlayer.this.surface == surface*/) {
                 videoListener.onRenderedFirstFrame();
             }
             if (videoDebugListener != null) {
-                videoDebugListener.onRenderedFirstFrame(surface);
+                videoDebugListener.onRenderedFirstFrame(output, renderTimeMs);
             }
         }
 
@@ -963,13 +1370,13 @@ public class TiledExoPlayer implements ExoPlayer {
             }
         }
 
-        @Override
-        public void onAudioSessionId(int sessionId) {
-            audioSessionId = sessionId;
-            if (audioDebugListener != null) {
-                audioDebugListener.onAudioSessionId(sessionId);
-            }
-        }
+//        @Override
+//        public void onAudioSessionId(int sessionId) {
+//            audioSessionId = sessionId;
+//            if (audioDebugListener != null) {
+//                audioDebugListener.onAudioSessionId(sessionId);
+//            }
+//        }
 
         @Override
         public void onAudioDecoderInitialized(String decoderName, long initializedTimestampMs,
@@ -988,13 +1395,13 @@ public class TiledExoPlayer implements ExoPlayer {
             }
         }
 
-        @Override
-        public void onAudioTrackUnderrun(int bufferSize, long bufferSizeMs,
-                                         long elapsedSinceLastFeedMs) {
-            if (audioDebugListener != null) {
-                audioDebugListener.onAudioTrackUnderrun(bufferSize, bufferSizeMs, elapsedSinceLastFeedMs);
-            }
-        }
+//        @Override
+//        public void onAudioTrackUnderrun(int bufferSize, long bufferSizeMs,
+//                                         long elapsedSinceLastFeedMs) {
+//            if (audioDebugListener != null) {
+//                audioDebugListener.onAudioTrackUnderrun(bufferSize, bufferSizeMs, elapsedSinceLastFeedMs);
+//            }
+//        }
 
         @Override
         public void onAudioDisabled(DecoderCounters counters) {
@@ -1082,28 +1489,28 @@ public class TiledExoPlayer implements ExoPlayer {
      */
     public interface VideoListener {
 
-        /**
-         * Called each time there's a change in the size of the video being rendered.
-         *
-         * @param width The video width in pixels.
-         * @param height The video height in pixels.
-         * @param unappliedRotationDegrees For videos that require a rotation, this is the clockwise
-         *     rotation in degrees that the application should apply for the video for it to be rendered
-         *     in the correct orientation. This value will always be zero on API levels 21 and above,
-         *     since the renderer will apply all necessary rotations internally. On earlier API levels
-         *     this is not possible. Applications that use {@link TextureView} can apply
-         *     the rotation by calling {@link TextureView#setTransform}. Applications that
-         *     do not expect to encounter rotated videos can safely ignore this parameter.
-         * @param pixelWidthHeightRatio The width to height ratio of each pixel. For the normal case
-         *     of square pixels this will be equal to 1.0. Different values are indicative of anamorphic
-         *     content.
-         */
-        void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees,
-                                float pixelWidthHeightRatio);
+//        /**
+//         * Called each time there's a change in the size of the video being rendered.
+//         *
+//         * @param width The video width in pixels.
+//         * @param height The video height in pixels.
+//         * @param unappliedRotationDegrees For videos that require a rotation, this is the clockwise
+//         *     rotation in degrees that the application should apply for the video for it to be rendered
+//         *     in the correct orientation. This value will always be zero on API levels 21 and above,
+//         *     since the renderer will apply all necessary rotations internally. On earlier API levels
+//         *     this is not possible. Applications that use {@link TextureView} can apply
+//         *     the rotation by calling {@link TextureView#setTransform}. Applications that
+//         *     do not expect to encounter rotated videos can safely ignore this parameter.
+//         * @param pixelWidthHeightRatio The width to height ratio of each pixel. For the normal case
+//         *     of square pixels this will be equal to 1.0. Different values are indicative of anamorphic
+//         *     content.
+//         */
+        void onVideoSizeChanged(VideoSize videoSize);
 
         /**
          * Called when a frame is rendered for the first time since setting the surface, and when a
-         * frame is rendered for the first time since a video track was selected.
+         * frame is rendered for the first
+         * since a video track was selected.
          */
         void onRenderedFirstFrame();
 
