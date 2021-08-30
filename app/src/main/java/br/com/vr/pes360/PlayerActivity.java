@@ -27,8 +27,8 @@ public class PlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        Log.e("TYPE_ON_CREATE", "Tipo TYPE_ON_CREATE!!");
-        userAgent  = Util.getUserAgent(this, "PES360");
+        Log.e("TYPE_ON_CREATE", "Type TYPE_ON_CREATE!!");
+        userAgent = Util.getUserAgent(this, "PES360");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.video_player_layout);
         playerView = findViewById(R.id.player_view);
