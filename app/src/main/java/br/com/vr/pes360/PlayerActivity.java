@@ -46,15 +46,13 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        if (Build.VERSION.SDK_INT > 23) {
-            initializePlayer();
-        }
+        initializePlayer();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if ((Build.VERSION.SDK_INT <= 23 || player == null)) {
+        if (player == null) {
             initializePlayer();
         }
     }
@@ -62,17 +60,13 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (Build.VERSION.SDK_INT <= 23) {
-            releasePlayer();
-        }
+        releasePlayer();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        if (Build.VERSION.SDK_INT > 23) {
-            releasePlayer();
-        }
+        releasePlayer();
     }
 
     private void initializePlayer() {
