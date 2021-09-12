@@ -31,8 +31,9 @@
 //import java.util.Arrays;
 //import java.util.List;
 //
-//import fr.unice.i3s.uca4svr.toucan_vr.dynamicEditing.DynamicEditingHolder;
-//import fr.unice.i3s.uca4svr.toucan_vr.dynamicEditing.SnapChange;
+//import br.com.vr.pes360.dynamicEditing.DynamicEditingHolder;
+//import br.com.vr.pes360.dynamicEditing.SnapChange;
+//
 //import fr.unice.i3s.uca4svr.toucan_vr.tilespicker.TilesPicker;
 //
 //public class PyramidalTrackSelection extends BaseTrackSelection {
@@ -56,7 +57,7 @@
 //
 //    private int selectedIndex;
 //    private int reason;
-//    private int adaptationSetIndex;
+//    private int[] adaptationSetIndices;
 //    private long currentPlaybackPosition;
 //    private long nextChunkStartTimeUs;
 //    private long nextChunkEndTimeUs;
@@ -162,8 +163,8 @@
 //        reason = C.SELECTION_REASON_INITIAL;
 //    }
 //
-//    public void updateAdaptationSetIndex(int adaptationSetIndex) {
-//        this.adaptationSetIndex = adaptationSetIndex;
+//    public void updateAdaptationSetIndices(int[] adaptationSetIndices) {
+//        this.adaptationSetIndices = adaptationSetIndices;
 //    }
 //
 //    public void updatePlaybackPosition(long playbackPositionUs) {

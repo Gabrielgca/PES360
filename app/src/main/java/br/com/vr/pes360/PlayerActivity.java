@@ -162,6 +162,7 @@ public class PlayerActivity extends AppCompatActivity {
                     .setUri("http://gpds.ene.unb.br/videos/normal/clans_4320x2160_30_3100000.mp4")
                     .build();
 
+
             player.setMediaItem(mediaItem);
             //Uri uri = Uri.parse("https://storage.googleapis.com/exoplayer-test-media-1/360/sphericalv2.mp4");
             //https://storage.googleapis.com/exoplayer-test-media-1/360/iceland0.ts

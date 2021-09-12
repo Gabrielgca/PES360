@@ -19,7 +19,7 @@ package br.com.vr.pes360.dashSRD.manifest;
 import java.util.Arrays;
 import java.util.List;
 
-public class SupplementalProperty {
+public class SupplementalProperty{
 
     /**
      * Main attributes
